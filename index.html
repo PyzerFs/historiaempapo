@@ -102,50 +102,39 @@
     </div>
 
     <script>
-        const API = "https://historiaempapo.onrender.com/api/responder"; // SUA URL
+        const API = "https://historiaempapo.onrender.com/api/responder";
 
         let rec, ouvindo = false;
-        let utterance; // agora é global
+        let falaAtual;
 
         function falar(texto) {
             speechSynthesis.cancel();
-            utterance = new SpeechSynthesisUtterance(texto);
-            utterance.lang = "pt-BR";
-            utterance.pitch = 1.6;
-            utterance.rate = 0.88;
-            utterance.volume = 1;
+            falaAtual = new SpeechSynthesisUtterance(texto);
+            falaAtual.lang = "pt-BR";
+            falaAtual.pitch = 1.6;
+            falaAtual.rate = 0.88;
 
             const vozes = speechSynthesis.getVoices();
-            const vozF = vozes.find(v => v.lang.startsWith("pt") && /fem|woman|female|feminine/i.test(v.name)) ||
+            const vozFeminina = vozes.find(v => v.lang.startsWith("pt") && /fem|woman|female|clara|letícia/i.test(v.name)) ||
                 vozes.find(v => v.lang.startsWith("pt"));
-            if (vozF) utterance.voice = vozF;
+            if (vozFeminina) falaAtual.voice = vozFeminina;
 
-            utterance.onend = () => {
+            falaAtual.onend = () => {
                 setTimeout(() => {
                     document.getElementById("resposta").innerText = "Fale novamente, inventor...";
                     rec.start();
-                }, 1800);
+                }, 2000);
             };
 
-            speechSynthesis.speak(utterance);
+            speechSynthesis.speak(falaAtual);
         }
 
         async function iniciar() {
             if (ouvindo) return;
-
-            try {
-                await navigator.mediaDevices.getUserMedia({ audio: true });
-            } catch {
-                document.getElementById("resposta").innerText = "Permitir microfone!";
-                return;
-            }
+            try { await navigator.mediaDevices.getUserMedia({ audio: true }); }
+            catch { alert("Permitir microfone!"); return; }
 
             const SR = window.SpeechRecognition || webkitSpeechRecognition;
-            if (!SR) {
-                document.getElementById("resposta").innerText = "Navegador não suporta microfone.";
-                return;
-            }
-
             rec = new SR();
             rec.lang = "pt-BR";
             rec.continuous = false;
@@ -157,7 +146,7 @@
 
             rec.onresult = async (e) => {
                 const pergunta = e.results[0][0].transcript.trim();
-                document.getElementById("resposta").innerText = `Ouvi: "${pergunta}"\n\nProcessando com vapor...`;
+                document.getElementById("resposta").innerText = `Ouvi: "${pergunta}"\n\nInvocando o éter...`;
                 rec.stop();
 
                 try {
@@ -170,7 +159,7 @@
                     document.getElementById("resposta").innerText = texto;
                     falar(texto);
                 } catch {
-                    const erro = "O éter está instável... mas estou aqui.";
+                    const erro = "O vapor está instável... mas estou aqui, inventor.";
                     document.getElementById("resposta").innerText = erro;
                     falar(erro);
                 }
@@ -188,7 +177,7 @@
         window.addEventListener("click", iniciar, { once: true });
         speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
     </script>
-
+    
 </body>
 
 </html>
