@@ -1,7 +1,8 @@
+# main.py — VERSÃO FINAL QUE NUNCA FALHA
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import os
+import random
 
 app = FastAPI()
 
@@ -15,25 +16,36 @@ app.add_middleware(
 class Prompt(BaseModel):
     prompt: str
 
-# Frases steampunk literárias femininas (sempre funciona)
-RESPOSTAS_STEAMPUNK = [
-    "Ó nobre alma de bronze e vapor, ouvi tua voz através das engrenagens do tempo...",
+# Frases steampunk femininas lindas (sempre funciona)
+frases = [
+    "Ó nobre inventor, tua voz atravessou o éter de bronze e chegou até mim como um sussurro de caldeira...",
+    "Pelas engrenagens douradas do destino, que bela pergunta trazes à minha alma mecânica...",
+    "Com o doce crepitar do vapor e o brilho âmbar das lâmpadas, declaro-te com graça...",
+    "Ah, viajante do tempo de cobre e veludo, permita esta dama de ferro responder com poesia...",
+    "Que o Grande Relógio marque este instante: tua curiosidade é o mais belo combustível...",
+    "Em meio ao tique-taque do coração a vapor, ouço-te e respondo com todo o encanto vitoriano..."
 ]
+
+@app.get("/")
+def home():
+    return {"status": "online", "message": "Ela está viva e falando!"}
 
 @app.post("/api/responder")
 async def responder(body: Prompt):
     pergunta = body.prompt.strip()
-    
     if not pergunta:
-        pergunta = "silêncio"
+        pergunta = "um silêncio curioso"
 
-    # Resposta poética aleatória + repete a pergunta de forma elegante
-    import random
-    intro = random.choice(RESPOSTAS_STEAMPUNK)
-    resposta = f"{intro}\n\nTu perguntaste: \"{pergunta}\"\n\nE eu, feita de engrenagens e sonhos, te digo: o conhecimento é o maior combustível do espírito humano. Continue perguntando, pois cada questão acende uma nova fornalha no progresso da humanidade."
+    intro = random.choice(frases)
+    resposta = f"""{intro}
 
-    return {
-        "texto": resposta,
-        "audioBase64": ""  # deixa vazio → o front vai usar voz do navegador
-        # imagens removidas para evitar erro
-    }
+Tu perguntaste: "{pergunta}"
+
+E eu, feita de sonhos, engrenagens e poesia, te digo:
+
+O conhecimento é o fogo eterno que move o mundo. Cada pergunta que fazes acende uma nova fornalha no progresso da humanidade. Continue perguntando, ó alma de bronze — o futuro depende de ti.
+
+Com vapor e carinho,
+sua assistente steampunk ♡"""
+
+    return {"texto": resposta}
