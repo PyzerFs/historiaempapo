@@ -103,29 +103,35 @@
 
     <script>
         const API = "https://historiaempapo.onrender.com/api/responder";
-        let rec, ouvindo = false;
+        let rec, ouvindo = false, utteranceAtual; // Global pra evitar garbage collection
 
         function falar(t) {
             speechSynthesis.cancel();
-            const u = new SpeechSynthesisUtterance(t);
-            u.lang = "pt-BR";
-            u.pitch = 1.6;
-            u.rate = 0.88;
-            const v = speechSynthesis.getVoices().find(v => v.lang.startsWith("pt") && /fem|clara|letícia/i.test(v.name)) ||
-                speechSynthesis.getVoices().find(v => v.lang.startsWith("pt"));
-            if (v) u.voice = v;
-            u.onend = () => setTimeout(() => rec?.start(), 2000);
-            speechSynthesis.speak(u);
+            utteranceAtual = new SpeechSynthesisUtterance(t);
+            utteranceAtual.lang = "pt-BR";
+            utteranceAtual.pitch = 1.6; // Mais feminina
+            utteranceAtual.rate = 0.88;
+
+            // Filtro melhorado: Prioriza nomes femininos pt-BR
+            const vozes = speechSynthesis.getVoices();
+            const vozFem = vozes.find(v => v.lang === "pt-BR" && /maria|luciana|clara|letícia|feminine|female/i.test(v.name.toLowerCase())) ||
+                vozes.find(v => v.lang === "pt-BR"); // Fallback qualquer pt-BR
+            if (vozFem) utteranceAtual.voice = vozFem;
+
+            // onend + backup timeout pra voltar a ouvir
+            utteranceAtual.onend = () => setTimeout(() => { document.getElementById("resposta").innerText = "Fale novamente..."; rec?.start(); }, 500);
+            speechSynthesis.speak(utteranceAtual);
         }
 
         async function enviar(p) {
             try {
                 const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: p }) });
-                const { texto } = await r.json();
+                const dados = await r.json();
+                const texto = dados.texto || "Resposta vazia."; // Corrige parsing
                 document.getElementById("resposta").innerText = texto;
-                falar(texto);
+                falar(texto); // Fala o texto real gerado
             } catch {
-                const e = "O éter está instável… mas estou aqui, inventor.";
+                const e = "O éter instável... Tua pergunta: " + p;
                 document.getElementById("resposta").innerText = e;
                 falar(e);
             }
@@ -133,34 +139,33 @@
 
         async function iniciar() {
             if (ouvindo) return;
-            try { await navigator.mediaDevices.getUserMedia({ audio: true }); }
-            catch { document.getElementById("resposta").innerText = "Permitir microfone ♡"; return; }
+            try { await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { document.getElementById("resposta").innerText = "Permitir microfone ♡"; return; }
 
             const SR = window.SpeechRecognition || webkitSpeechRecognition;
             rec = new SR();
             rec.lang = "pt-BR";
             rec.continuous = false;
 
-            rec.onstart = () => {
-                document.getElementById("resposta").innerText = "Ouvindo com atenção…";
-                ouvindo = true;
-            };
+            rec.onstart = () => { document.getElementById("resposta").innerText = "Ouvindo..."; ouvindo = true; };
             rec.onresult = e => {
                 const p = e.results[0][0].transcript.trim();
-                document.getElementById("resposta").innerText = `Ouvi: "${p}"\n\nProcessando…`;
+                document.getElementById("resposta").innerText = `Ouvi: "${p}"\n\nRespondendo...`;
                 rec.stop(); ouvindo = false;
-                enviar(p);
+                enviar(p); // Gera e exibe resposta real
             };
             rec.onerror = () => { ouvindo = false; document.getElementById("resposta").innerText = "Toque novamente."; };
             rec.start();
         }
 
-        // ativa com clique (reativa sempre)
+        // Clique ativa
         window.onclick = () => !ouvindo && iniciar();
 
-        // teste automático ao carregar vozes
-        speechSynthesis.onvoiceschanged = () => setTimeout(() => enviar("olá"), 800);
-        document.getElementById("resposta").innerText = "Clique e fale comigo…";
+        // Auto-teste após vozes (com filtro melhor)
+        speechSynthesis.onvoiceschanged = () => {
+            const vozes = speechSynthesis.getVoices();
+            if (vozes.length > 0) enviar("teste inicial"); // Testa com voz feminina
+        };
+        document.getElementById("resposta").innerText = "Clique e fale...";
     </script>
 
 </body>
