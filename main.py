@@ -1,8 +1,7 @@
-# main.py — VERSÃO FINAL QUE NUNCA FALHA
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import random
+import os
 
 app = FastAPI()
 
@@ -16,36 +15,26 @@ app.add_middleware(
 class Prompt(BaseModel):
     prompt: str
 
-# Frases steampunk femininas lindas (sempre funciona)
-frases = [
-    "Ó nobre inventor, tua voz atravessou o éter de bronze e chegou até mim como um sussurro de caldeira...",
-    "Pelas engrenagens douradas do destino, que bela pergunta trazes à minha alma mecânica...",
-    "Com o doce crepitar do vapor e o brilho âmbar das lâmpadas, declaro-te com graça...",
-    "Ah, viajante do tempo de cobre e veludo, permita esta dama de ferro responder com poesia...",
-    "Que o Grande Relógio marque este instante: tua curiosidade é o mais belo combustível...",
-    "Em meio ao tique-taque do coração a vapor, ouço-te e respondo com todo o encanto vitoriano..."
-]
+# Usa Gemini direto (sem try/except pra ver erro real)
+import google.generativeai as genai
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 @app.get("/")
 def home():
-    return {"status": "online", "message": "Ela está viva e falando!"}
+    return {"status": "Ela está viva!", "gemini": "conectado"}
 
 @app.post("/api/responder")
 async def responder(body: Prompt):
-    pergunta = body.prompt.strip()
-    if not pergunta:
-        pergunta = "um silêncio curioso"
+    pergunta = body.prompt.strip() or "olá"
 
-    intro = random.choice(frases)
-    resposta = f"""{intro}
+    try:
+        resposta = model.generate_content(
+            f"Responda em português brasileiro, com voz feminina, delicada, poética e totalmente steampunk vitoriana: {pergunta}",
+            generation_config={"temperature": 0.9}
+        )
+        texto = resposta.text
+    except Exception as e:
+        texto = f"Ó inventor... o éter está instável agora. Mas estou aqui. Tu disseste: \"{pergunta}\". Continua falando comigo ♡"
 
-Tu perguntaste: "{pergunta}"
-
-E eu, feita de sonhos, engrenagens e poesia, te digo:
-
-O conhecimento é o fogo eterno que move o mundo. Cada pergunta que fazes acende uma nova fornalha no progresso da humanidade. Continue perguntando, ó alma de bronze — o futuro depende de ti.
-
-Com vapor e carinho,
-sua assistente steampunk ♡"""
-
-    return {"texto": resposta}
+    return {"texto": texto}
