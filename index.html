@@ -104,98 +104,145 @@
     <script>
         const API = "https://historiaempapo.onrender.com/api/responder";
 
-        let rec, ouvindo = false;
+        let rec;
+        let ouvindo = false;
         let falaAtual;
 
         function falar(texto) {
+            console.log("🔊 Tentando falar:", texto.substring(0, 50) + "..."); // Debug no F12
+
             speechSynthesis.cancel();
             falaAtual = new SpeechSynthesisUtterance(texto);
             falaAtual.lang = "pt-BR";
-            falaAtual.pitch = 1.6;
-            falaAtual.rate = 0.88;
+            falaAtual.pitch = 1.6; // Feminina
+            falaAtual.rate = 0.88; // Elegante
             falaAtual.volume = 1;
 
             const vozes = speechSynthesis.getVoices();
-            const vozFeminina = vozes.find(v => v.lang.startsWith("pt") && /fem|woman|female|clara|letícia/i.test(v.name)) ||
+            console.log("Vozes encontradas:", vozes.length, "— Ex: ", vozes.map(v => v.name).slice(0, 3)); // Debug
+
+            const vozFeminina = vozes.find(v => v.lang.startsWith("pt") && /fem|clara|letícia|mulher/i.test(v.name.toLowerCase())) ||
                 vozes.find(v => v.lang.startsWith("pt"));
 
-            if (vozFeminina) falaAtual.voice = vozFeminina;
+            if (vozFeminina) {
+                falaAtual.voice = vozFeminina;
+                console.log("✅ Voz feminina selecionada:", vozFeminina.name);
+            } else {
+                console.warn("⚠️ Voz PT-BR default (pode não ser feminina)");
+            }
 
             falaAtual.onend = () => {
+                console.log("Fala terminou — voltando a ouvir em 2s");
                 setTimeout(() => {
                     document.getElementById("resposta").innerText = "Fale novamente, inventor...";
                     if (rec && !ouvindo) rec.start();
                 }, 2000);
             };
 
+            falaAtual.onerror = (e) => console.error("Erro na fala:", e);
+
             speechSynthesis.speak(falaAtual);
+            console.log("✅ Fala iniciada!");
         }
 
-        async function iniciar() {
+        async function testarAPI(pergunta = "teste inicial") {
+            console.log("🧪 Testando API com:", pergunta);
+            document.getElementById("resposta").innerText = "Testando conexão...";
+
+            try {
+                const resp = await fetch(API, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt: pergunta })
+                });
+
+                console.log("Resposta HTTP:", resp.status); // Deve ser 200
+
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+                const dados = await resp.json();
+                const texto = dados.texto || "Resposta vazia.";
+                console.log("✅ API respondeu:", texto.substring(0, 100));
+
+                document.getElementById("resposta").innerText = texto;
+                falar(texto);
+            } catch (err) {
+                console.error("❌ Erro na API:", err);
+                const erro = "O éter falhou: " + err.message + ". Backend OK, cheque permissões.";
+                document.getElementById("resposta").innerText = erro;
+                falar(erro);
+            }
+        }
+
+        async function iniciarMicrofone() {
             if (ouvindo) return;
 
             try {
-                await navigator.mediaDevices.getUserMedia({ audio: true });
-            } catch {
-                document.getElementById("resposta").innerText = "Permitir microfone para eu falar contigo ♡";
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log("✅ Microfone ativado");
+                stream.getTracks().forEach(track => track.stop()); // Para após permissão
+            } catch (err) {
+                console.error("❌ Microfone negado:", err);
+                document.getElementById("resposta").innerText = "Clique e permita o microfone para eu ouvir você ♡";
                 return;
             }
 
-            const SR = window.SpeechRecognition || webkitSpeechRecognition;
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SR) {
-                document.getElementById("resposta").innerText = "Seu navegador não suporta microfone.";
+                document.getElementById("resposta").innerText = "Use Chrome para microfone.";
                 return;
             }
 
             rec = new SR();
             rec.lang = "pt-BR";
             rec.continuous = false;
+            rec.interimResults = false;
 
             rec.onstart = () => {
-                document.getElementById("resposta").innerText = "Ouvindo com atenção...";
+                console.log("🎤 Ouvindo...");
+                document.getElementById("resposta").innerText = "Ouvindo com atenção... Fale agora!";
                 ouvindo = true;
             };
 
             rec.onresult = async (e) => {
                 const pergunta = e.results[0][0].transcript.trim();
-                document.getElementById("resposta").innerText = `Ouvi: "${pergunta}"\n\nInvocando o éter...`;
+                console.log("🗣️ Capturado:", pergunta);
+                document.getElementById("resposta").innerText = `Ouvi: "${pergunta}"\n\nProcessando...`;
                 rec.stop();
                 ouvindo = false;
 
-                try {
-                    const r = await fetch(API, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ prompt: pergunta })
-                    });
-                    const { texto } = await r.json();
-                    document.getElementById("resposta").innerText = texto;
-                    falar(texto);
-                } catch (err) {
-                    const erro = "O vapor está instável... mas estou aqui, inventor.";
-                    document.getElementById("resposta").innerText = erro;
-                    falar(erro);
-                }
+                await testarAPI(pergunta);
             };
 
-            rec.onerror = () => {
-                document.getElementById("resposta").innerText = "Microfone falhou. Toque novamente.";
+            rec.onerror = (e) => {
+                console.error("Erro microfone:", e.error);
+                document.getElementById("resposta").innerText = "Microfone errou (" + e.error + "). Toque de novo.";
+                ouvindo = false;
+            };
+
+            rec.onend = () => {
+                console.log("Gravação parou.");
                 ouvindo = false;
             };
 
             rec.start();
-            document.getElementById("resposta").innerText = "Toque na tela e fale comigo...";
         }
 
-        // Ativa com clique
+        // Inicialização
         window.addEventListener("click", () => {
-            if (!ouvindo) iniciar();
+            if (!ouvindo) iniciarMicrofone();
         });
 
-        // Carrega vozes (obrigatório em alguns navegadores)
-        if (speechSynthesis.onvoiceschanged !== undefined) {
-            speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
-        }
+        // Carrega vozes e testa tudo
+        speechSynthesis.onvoiceschanged = () => {
+            console.log("Vozes carregadas!");
+            if (speechSynthesis.getVoices().length > 0) {
+                setTimeout(() => testarAPI("olá, teste de voz steampunk"), 500); // Testa auto ao carregar
+            }
+        };
+
+        console.log("Página pronta — clique para ativar!");
+        document.getElementById("resposta").innerText = "Clique para ativar microfone e teste inicial.";
     </script>
 
 </body>
