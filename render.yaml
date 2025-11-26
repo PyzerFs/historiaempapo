@@ -1,0 +1,12 @@
+# render.yaml
+services:
+  - type: web
+    name: assistente-steampunk
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      GEMINI_API_KEY:
+        fromDatabase: false
+        value: AIzaSyAq9aiZ0HQ3FdY1ZdIxOorxETdl3vvP9YI   # ← troque pela sua (ou coloque depois no painel)
