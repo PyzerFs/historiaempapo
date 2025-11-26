@@ -109,13 +109,12 @@
             speechSynthesis.cancel();
             utt = new SpeechSynthesisUtterance(texto);
             utt.lang = "pt-BR";
-            utt.pitch = 1.6;
+            utt.pitch = 1.7;   // bem feminina
             utt.rate = 0.88;
 
-            // Força voz feminina (funciona em Windows, Mac, Android, Chrome)
             const vozes = speechSynthesis.getVoices();
-            const vozFem = vozes.find(v => v.lang === "pt-BR" && /maria|luciana|clara|letícia|female|feminine/i.test(v.name.toLowerCase())) ||
-                vozes.find(v => v.lang === "pt-BR");
+            const vozFem = vozes.find(v => v.lang === "pt-BR" && /maria|luciana|clara|letícia|female/i.test(v.name.toLowerCase()))
+                || vozes.find(v => v.lang === "pt-BR");
             if (vozFem) utt.voice = vozFem;
 
             utt.onend = () => setTimeout(() => rec?.start(), 1500);
@@ -123,7 +122,7 @@
         }
 
         async function responder(pergunta) {
-            document.getElementById("resposta").innerText = "Processando…";
+            document.getElementById("resposta").innerText = "Processando com vapor e engrenagens…";
 
             try {
                 const res = await fetch(API, {
@@ -131,11 +130,12 @@
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ prompt: pergunta })
                 });
-                const { texto } = await res.json();
+                const dados = await res.json();
+                const texto = dados.texto || "Sem resposta...";
                 document.getElementById("resposta").innerText = texto;
                 falar(texto);
-            } catch {
-                const erro = "O éter está instável… mas estou aqui, inventor.";
+            } catch (e) {
+                const erro = "O éter falhou… mas estou aqui.";
                 document.getElementById("resposta").innerText = erro;
                 falar(erro);
             }
@@ -143,34 +143,42 @@
 
         function iniciar() {
             if (ouvindo) return;
-            navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
-                const SR = window.SpeechRecognition || webkitSpeechRecognition;
-                rec = new SR();
-                rec.lang = "pt-BR";
-                rec.continuous = false;
 
-                rec.onstart = () => {
-                    document.getElementById("resposta").innerText = "Ouvindo com atenção…";
-                    ouvindo = true;
-                };
-                rec.onresult = e => {
-                    const p = e.results[0][0].transcript.trim();
-                    rec.stop();
-                    ouvindo = false;
-                    responder(p);
-                };
-                rec.onerror = () => { ouvindo = false; document.getElementById("resposta").innerText = "Toque novamente."; };
-                rec.start();
-            }).catch(() => {
-                document.getElementById("resposta").innerText = "Permitir microfone ♡";
-            });
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(() => {
+                    const SR = window.SpeechRecognition || webkitSpeechRecognition;
+                    rec = new SR();
+                    rec.lang = "pt-BR";
+                    rec.continuous = false;
+
+                    rec.onstart = () => {
+                        document.getElementById("resposta").innerText = "Ouvindo com atenção…";
+                        ouvindo = true;
+                    };
+
+                    rec.onresult = (e) => {
+                        const pergunta = e.results[0][0].transcript.trim();
+                        ouvindo = false;
+                        rec.stop();
+                        responder(pergunta);
+                    };
+
+                    rec.onerror = () => {
+                        ouvindo = false;
+                        document.getElementById("resposta").innerText = "Toque de novo para tentar.";
+                    };
+
+                    rec.start();
+                })
+                .catch(() => {
+                    document.getElementById("resposta").innerText = "Permitir microfone no navegador";
+                });
         }
 
+        // Só ativa quando você clicar — nada automático
         window.onclick = () => !ouvindo && iniciar();
 
-        // Carrega vozes e testa rápido (opcional, remove se não quiser)
-        speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
-        setTimeout(() => responder("olá"), 1000); // teste automático ao abrir
+        document.getElementById("resposta").innerText = "Clique na tela e fale comigo…";
     </script>
 
 </body>
