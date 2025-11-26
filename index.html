@@ -103,133 +103,64 @@
 
     <script>
         const API = "https://historiaempapo.onrender.com/api/responder";
+        let rec, ouvindo = false;
 
-        let rec;
-        let ouvindo = false;
-        let falaAtual;
-
-        function falar(texto) {
-            console.log("🔊 Falando:", texto.substring(0, 50) + "...");
-
+        function falar(t) {
             speechSynthesis.cancel();
-            falaAtual = new SpeechSynthesisUtterance(texto);
-            falaAtual.lang = "pt-BR";
-            falaAtual.pitch = 1.6;
-            falaAtual.rate = 0.88;
-            falaAtual.volume = 1;
-
-            const vozes = speechSynthesis.getVoices();
-            const vozFeminina = vozes.find(v => v.lang.startsWith("pt") && /fem|clara|letícia|mulher/i.test(v.name.toLowerCase())) ||
-                vozes.find(v => v.lang.startsWith("pt"));
-
-            if (vozFeminina) falaAtual.voice = vozFeminina;
-
-            falaAtual.onend = () => {
-                setTimeout(() => {
-                    document.getElementById("resposta").innerText = "Fale novamente, inventor...";
-                    if (rec && !ouvindo) rec.start();
-                }, 2000);
-            };
-
-            speechSynthesis.speak(falaAtual);
+            const u = new SpeechSynthesisUtterance(t);
+            u.lang = "pt-BR";
+            u.pitch = 1.6;
+            u.rate = 0.88;
+            const v = speechSynthesis.getVoices().find(v => v.lang.startsWith("pt") && /fem|clara|letícia/i.test(v.name)) ||
+                speechSynthesis.getVoices().find(v => v.lang.startsWith("pt"));
+            if (v) u.voice = v;
+            u.onend = () => setTimeout(() => rec?.start(), 2000);
+            speechSynthesis.speak(u);
         }
 
-        async function testarAPI(pergunta = "teste de ativação") {
-            console.log("🧪 Chamando API com:", pergunta);
-            document.getElementById("resposta").innerText = "Conectando ao éter...";
-
+        async function enviar(p) {
             try {
-                const r = await fetch(API, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt: pergunta })
-                });
-
-                console.log("HTTP Status:", r.status); // Deve ser 200
-
-                if (!r.ok) throw new Error(`Erro HTTP: ${r.status}`);
-
-                const dados = await r.json();
-                const texto = dados.texto || "Resposta vazia da API."; // Corrige destructuring
-                console.log("✅ Texto recebido:", texto.substring(0, 100));
-
-                document.getElementById("resposta").innerText = texto; // Força exibição
+                const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: p }) });
+                const { texto } = await r.json();
+                document.getElementById("resposta").innerText = texto;
                 falar(texto);
-            } catch (err) {
-                console.error("❌ Erro na API:", err);
-                const erro = "Falha no vapor: " + err.message;
-                document.getElementById("resposta").innerText = erro;
-                falar(erro);
+            } catch {
+                const e = "O éter está instável… mas estou aqui, inventor.";
+                document.getElementById("resposta").innerText = e;
+                falar(e);
             }
         }
 
-        async function iniciarMicrofone() {
+        async function iniciar() {
             if (ouvindo) return;
-
-            try {
-                await navigator.mediaDevices.getUserMedia({ audio: true });
-                console.log("✅ Microfone OK");
-            } catch (err) {
-                console.error("❌ Microfone negado:", err);
-                document.getElementById("resposta").innerText = "Permita o microfone para eu te ouvir ♡";
-                return;
-            }
+            try { await navigator.mediaDevices.getUserMedia({ audio: true }); }
+            catch { document.getElementById("resposta").innerText = "Permitir microfone ♡"; return; }
 
             const SR = window.SpeechRecognition || webkitSpeechRecognition;
-            if (!SR) {
-                document.getElementById("resposta").innerText = "Use Chrome para melhor suporte.";
-                return;
-            }
-
             rec = new SR();
             rec.lang = "pt-BR";
             rec.continuous = false;
 
             rec.onstart = () => {
-                console.log("🎤 Ouvindo...");
-                document.getElementById("resposta").innerText = "Ouvindo... Fale algo steampunk!";
+                document.getElementById("resposta").innerText = "Ouvindo com atenção…";
                 ouvindo = true;
             };
-
-            rec.onresult = async (e) => {
-                const pergunta = e.results[0][0].transcript.trim();
-                console.log("🗣️ Ouvi:", pergunta);
-                document.getElementById("resposta").innerText = `Ouvi: "${pergunta}"\n\nProcessando com engrenagens...`;
-                rec.stop();
-                ouvindo = false;
-
-                await testarAPI(pergunta); // Chama API corretamente
+            rec.onresult = e => {
+                const p = e.results[0][0].transcript.trim();
+                document.getElementById("resposta").innerText = `Ouvi: "${p}"\n\nProcessando…`;
+                rec.stop(); ouvindo = false;
+                enviar(p);
             };
-
-            rec.onerror = (e) => {
-                console.error("Erro microfone:", e.error);
-                document.getElementById("resposta").innerText = "Microfone: " + e.error + ". Toque de novo.";
-                ouvindo = false;
-            };
-
-            rec.onend = () => {
-                console.log("Gravação acabou.");
-                ouvindo = false;
-            };
-
+            rec.onerror = () => { ouvindo = false; document.getElementById("resposta").innerText = "Toque novamente."; };
             rec.start();
         }
 
-        // Clique ativa (reativa sempre)
-        window.addEventListener("click", () => {
-            if (!ouvindo) iniciarMicrofone();
-        });
+        // ativa com clique (reativa sempre)
+        window.onclick = () => !ouvindo && iniciar();
 
-        // Auto-teste (roda em 1s + onvoiceschanged)
-        setTimeout(() => testarAPI("teste inicial"), 1000);
-
-        speechSynthesis.onvoiceschanged = () => {
-            console.log("Vozes prontas!");
-            if (speechSynthesis.getVoices().length > 0) testarAPI("vozes ativas");
-        };
-
-        console.log("Site pronto — clique e fale!");
-        document.getElementById("resposta").innerText = "Clique para ativar e teste!";
+        // teste automático ao carregar vozes
+        speechSynthesis.onvoiceschanged = () => setTimeout(() => enviar("olá"), 800);
+        document.getElementById("resposta").innerText = "Clique e fale comigo…";
     </script>
 
 </body>
