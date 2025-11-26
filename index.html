@@ -102,117 +102,91 @@
     </div>
 
     <script>
-        const API = "https://historiaempapo.onrender.com/api/responder"; // MUDE AQUI
+        const API = "https://historiaempapo.onrender.com/api/responder"; // SUA URL
 
-        let rec;
-        let estaOuvindo = false;
+        let rec, ouvindo = false;
+        let utterance; // agora é global
 
-        // Voz feminina suave e steampunk (sempre funciona)
         function falar(texto) {
-            // Cancela qualquer fala anterior
-            window.speechSynthesis.cancel();
-
-            const utterance = new SpeechSynthesisUtterance(texto);
+            speechSynthesis.cancel();
+            utterance = new SpeechSynthesisUtterance(texto);
             utterance.lang = "pt-BR";
-            utterance.pitch = 1.5;    // voz mais aguda = feminina
-            utterance.rate = 0.85;    // fala mais devagar, elegante
+            utterance.pitch = 1.6;
+            utterance.rate = 0.88;
             utterance.volume = 1;
 
-            // Tenta pegar voz feminina brasileira premium (se disponível)
-            const vozes = window.speechSynthesis.getVoices();
-            const vozIdeal = vozes.find(v => v.lang === "pt-BR" && v.name.includes("feminine")) ||
-                vozes.find(v => v.lang === "pt-BR");
+            const vozes = speechSynthesis.getVoices();
+            const vozF = vozes.find(v => v.lang.startsWith("pt") && /fem|woman|female|feminine/i.test(v.name)) ||
+                vozes.find(v => v.lang.startsWith("pt"));
+            if (vozF) utterance.voice = vozF;
 
-            if (vozIdeal) utterance.voice = vozIdeal;
+            utterance.onend = () => {
+                setTimeout(() => {
+                    document.getElementById("resposta").innerText = "Fale novamente, inventor...";
+                    rec.start();
+                }, 1800);
+            };
 
-            window.speechSynthesis.speak(utterance);
+            speechSynthesis.speak(utterance);
         }
 
-        // Inicia o microfone (só na primeira vez)
-        async function iniciarMicrofone() {
-            if (estaOuvindo) return;
+        async function iniciar() {
+            if (ouvindo) return;
 
             try {
                 await navigator.mediaDevices.getUserMedia({ audio: true });
-            } catch (err) {
-                document.getElementById("resposta").innerText = "Permitir microfone para falar comigo.";
+            } catch {
+                document.getElementById("resposta").innerText = "Permitir microfone!";
                 return;
             }
 
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                document.getElementById("resposta").innerText = "Seu navegador não suporta microfone.";
+            const SR = window.SpeechRecognition || webkitSpeechRecognition;
+            if (!SR) {
+                document.getElementById("resposta").innerText = "Navegador não suporta microfone.";
                 return;
             }
 
-            rec = new SpeechRecognition();
+            rec = new SR();
             rec.lang = "pt-BR";
             rec.continuous = false;
-            rec.interimResults = false;
 
             rec.onstart = () => {
                 document.getElementById("resposta").innerText = "Ouvindo com atenção...";
-                estaOuvindo = true;
+                ouvindo = true;
             };
 
-            rec.onresult = async (event) => {
-                const texto = event.results[0][0].transcript.trim();
-                document.getElementById("resposta").innerText = `Ouvi: "${texto}"\n\nProcessando com vapor e engrenagens...`;
-
-                // PARA O MICROFONE AQUI (silencia até ela terminar de falar)
+            rec.onresult = async (e) => {
+                const pergunta = e.results[0][0].transcript.trim();
+                document.getElementById("resposta").innerText = `Ouvi: "${pergunta}"\n\nProcessando com vapor...`;
                 rec.stop();
 
                 try {
-                    const resp = await fetch(API, {
+                    const r = await fetch(API, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ prompt: texto })
+                        body: JSON.stringify({ prompt: pergunta })
                     });
-
-                    const dados = await resp.json();
-                    const respostaTexto = dados.texto || "Minha voz mecânica falhou... mas estou aqui.";
-
-                    document.getElementById("resposta").innerText = respostaTexto;
-                    document.getElementById("imagens").innerHTML = ""; // limpa imagens
-
-                    // Fala com voz feminina suave
-                    falar(respostaTexto);
-
-                    // Só volta a ouvir depois que terminar de falar
-                    utterance.onend = () => {
-                        setTimeout(() => {
-                            document.getElementById("resposta").innerText = "Fale novamente, inventor...";
-                            rec.start();
-                        }, 1500);
-                    };
-
-                } catch (err) {
-                    document.getElementById("resposta").innerText = "O éter está instável... tente novamente.";
-                    setTimeout(() => rec.start(), 2000);
+                    const { texto } = await r.json();
+                    document.getElementById("resposta").innerText = texto;
+                    falar(texto);
+                } catch {
+                    const erro = "O éter está instável... mas estou aqui.";
+                    document.getElementById("resposta").innerText = erro;
+                    falar(erro);
                 }
             };
 
             rec.onerror = () => {
-                document.getElementById("resposta").innerText = "Microfone falhou. Toque para tentar novamente.";
-                estaOuvindo = false;
+                document.getElementById("resposta").innerText = "Microfone falhou. Toque novamente.";
+                ouvindo = false;
             };
 
-            rec.onend = () => {
-                estaOuvindo = false;
-            };
-
+            rec.start();
             document.getElementById("resposta").innerText = "Toque na tela e fale comigo...";
         }
 
-        // Ativa com um toque/click
-        window.addEventListener("click", () => {
-            if (!estaOuvindo) iniciarMicrofone();
-        }, { once: true });
-
-        // Carrega vozes (necessário em alguns navegadores)
-        window.speechSynthesis.onvoiceschanged = () => {
-            window.speechSynthesis.getVoices();
-        };
+        window.addEventListener("click", iniciar, { once: true });
+        speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
     </script>
 
 </body>
