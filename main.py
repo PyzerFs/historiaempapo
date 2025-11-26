@@ -1,4 +1,3 @@
-# main.py - VERSÃO CORRIGIDA E FUNCIONAL NO RENDER
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,18 +5,16 @@ import os
 import base64
 import uuid
 
-# OPTIONAL Gemini
 try:
     import google.generativeai as genai
     GENAI = True
-except ImportError:
+except:
     GENAI = False
 
-# OPTIONAL gTTS fallback
 try:
     from gtts import gTTS
     GTTS = True
-except ImportError:
+except:
     GTTS = False
 
 app = FastAPI()
@@ -25,7 +22,6 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -33,65 +29,65 @@ app.add_middleware(
 class Prompt(BaseModel):
     prompt: str
 
-# CORRETO: pega do ambiente (Render)
-API_KEY = os.getenv("GEMINI_API_KEY")  # <-- Nome da variável no Render
+# PEGA A CHAVE CORRETAMENTE
+API_KEY = os.getenv("GEMINI_API_KEY")
 
 if API_KEY and GENAI:
     genai.configure(api_key=API_KEY)
-    text_model = genai.GenerativeModel("gemini-1.5-flash")
-    image_model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    print("Gemini 1.5 Flash carregado com sucesso!")
 else:
-    text_model = None
-    image_model = None
-    print("Gemini não configurado. Usando fallback.")
+    model = None
+    print("AVISO: GEMINI_API_KEY não encontrada ou biblioteca ausente → usando fallback")
 
-def gerar_audio_fallback(texto):
-    if not GTTS:
-        return ""
-    fname = f"/tmp/tts_{uuid.uuid4().hex}.mp3"
+def fallback_audio(texto):
+    if not GTTS: return ""
+    fname = f"/tmp/{uuid.uuid4().hex}.mp3"
     try:
-        tts = gTTS(texto, lang="pt")
-        tts.save(fname)
+        gTTS(texto, lang="pt").save(fname)
         return base64.b64encode(open(fname, "rb").read()).decode()
     except:
         return ""
 
-def imagem_placeholder():
+def placeholder_img():
     return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAr8B9yR2cYwAAAAASUVORK5CYII="
 
 @app.get("/")
-async def root():
-    return {"message": "Assistente Steampunk rodando!"}
+def home():
+    return {"status": "online", "gemini": bool(model)}
 
 @app.post("/api/responder")
 async def responder(body: Prompt):
-    prompt = body.prompt.strip()
+    prompt = body.prompt.strip() or "Olá"
 
-    # Tenta usar Gemini
-    if API_KEY and GENAI and text_model:
+    if model:
         try:
-            # Texto literário
-            response = text_model.generate_content(
-                f"Responda em português, de forma literária, feminina, poética e educativa, no universo steampunk: {prompt}"
-            )
-            texto = response.text
-
-            # Áudio com voz feminina
-            audio_response = text_model.generate_content(
-                texto,
+            # Texto + áudio + imagem tudo em uma única chamada (mais rápido e estável)
+            response = model.generate_content(
+                [
+                    f"Responda em português, de forma literária, feminina, poética e steampunk: {prompt}",
+                    "Gere também uma imagem steampunk relacionada e um áudio com voz feminina suave em português."
+                ],
                 generation_config={
-                    "response_mime_type": "audio/mp3",
-                    "temperature": 0.7
+                    "temperature": 0.9,
+                    "response_mime_type": "multipart/mixed"  # permite texto + áudio + imagem
                 }
             )
-            audio_b64 = audio_response.candidates[0].content.parts[0].inline_data.data
 
-            # Imagem steampunk
-            img_response = image_model.generate_content([
-                f"Crie uma ilustração detalhada em estilo steampunk vitoriano, engrenagens, vapor, bronze, tons sépia e laranja, alta qualidade: {prompt}",
-            ], generation_config={"response_mime_type": "image/png"})
+            texto = "Minha mente de bronze ainda processa sua pergunta..."
+            audio_b64 = ""
+            img_b64 = placeholder_img()
 
-            img_b64 = img_response.candidates[0].content.parts[0].inline_data.data
+            for part in response.parts:
+                if part.text:
+                    texto = part.text
+                if hasattr(part, "inline_data") and part.inline_data:
+                    mime = part.inline_data.mime_type
+                    data = part.inline_data.data
+                    if mime.startswith("audio"):
+                        audio_b64 = data
+                    if mime.startswith("image"):
+                        img_b64 = data
 
             return {
                 "texto": texto,
@@ -100,15 +96,14 @@ async def responder(body: Prompt):
             }
 
         except Exception as e:
-            print("Erro no Gemini:", str(e))
+            print("ERRO GEMINI:", str(e))
 
-    # Fallback se Gemini falhar
-    texto = f"Ó nobre inventor, em meio às engrenagens do tempo... {prompt}. Que o vapor da curiosidade jamais se esgote em teu peito."
-    audio = gerar_audio_fallback(texto)
-    img = imagem_placeholder()
+    # FALLBACK 100% funcional
+    texto = f"Ó nobre inventor, em meio ao vapor e engrenagens, ouvi tua voz: \"{prompt}\". Que o fogo da curiosidade nunca se apague em teu peito!"
+    audio = fallback_audio(texto)
 
     return {
         "texto": texto,
-        "audioBase64": audio or "",
-        "imagens": [f"data:image/png;base64,{img}"]
+        "audioBase64": audio,
+        "imagens": [f"data:image/png;base64,{placeholder_img()}"]
     }
