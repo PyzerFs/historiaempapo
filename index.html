@@ -100,92 +100,60 @@
             <div id="imagens"></div>
         </div>
     </div>
-
+    
     <script>
         const API = "https://historiaempapo.onrender.com/api/responder";
         let rec = null;
 
-        function falar(texto) {
+        function falar(t) {
             speechSynthesis.cancel();
-            const u = new SpeechSynthesisUtterance(texto);
+            const u = new SpeechSynthesisUtterance(t);
             u.lang = "pt-BR";
             u.pitch = 1.7;
             u.rate = 0.88;
-
-            // Força voz feminina (Maria, Luciana, Clara, etc.)
-            const vozes = speechSynthesis.getVoices();
-            const vozFeminina = vozes.find(v => v.lang === "pt-BR" && /maria|luciana|clara|letícia|female/i.test(v.name.toLowerCase()))
-                || vozes.find(v => v.lang.startsWith("pt"));
-            if (vozFeminina) u.voice = vozFeminina;
-
+            const v = speechSynthesis.getVoices().find(v => /maria|luciana|clara|letícia|female/i.test(v.name)) || speechSynthesis.getVoices()[0];
+            if (v) u.voice = v;
             u.onend = () => setTimeout(() => rec?.start(), 2000);
             speechSynthesis.speak(u);
         }
 
-        async function responder(pergunta) {
-            document.getElementById("resposta").innerText = "Processando com vapor e engrenagens…";
-
+        async function enviar(p) {
+            document.getElementById("resposta").innerText = "Processando com vapor…";
             try {
-                const resposta = await fetch(API, {
+                const r = await fetch(API, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt: pergunta })
+                    body: JSON.stringify({ prompt: p })
                 });
-
-                if (!resposta.ok) throw new Error("Erro HTTP: " + resposta.status);
-
-                const dados = await resposta.json();
-                const texto = dados.texto || "Sem resposta...";
-
+                const { texto } = await r.json();
                 document.getElementById("resposta").innerText = texto;
                 falar(texto);
-            } catch (erro) {
-                console.error("Erro na API:", erro);
-                document.getElementById("resposta").innerText = "O éter falhou… mas estou aqui, inventor.";
-                falar("O éter falhou… mas estou aqui.");
+            } catch {
+                document.getElementById("resposta").innerText = "Éter instável…";
+                falar("Éter instável…");
             }
         }
 
         function iniciar() {
             if (rec) return;
-
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(() => {
-                    const SR = window.SpeechRecognition || webkitSpeechRecognition;
-                    rec = new SR();
-                    rec.lang = "pt-BR";
-                    rec.continuous = false;
-
-                    rec.onstart = () => document.getElementById("resposta").innerText = "Ouvindo com atenção…";
-
-                    rec.onresult = (e) => {
-                        const pergunta = e.results[0][0].transcript.trim();
-                        rec.stop();
-                        responder(pergunta);
-                    };
-
-                    rec.onerror = () => {
-                        document.getElementById("resposta").innerText = "Erro no microfone. Toque novamente.";
-                        rec = null;
-                    };
-
-                    rec.start();
-                })
-                .catch(() => {
-                    document.getElementById("resposta").innerText = "Permitir microfone para eu te ouvir ♡";
-                });
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
+                const R = window.SpeechRecognition || webkitSpeechRecognition;
+                rec = new R();
+                rec.lang = "pt-BR";
+                rec.continuous = false;
+                rec.onstart = () => document.getElementById("resposta").innerText = "Ouvindo…";
+                rec.onresult = e => {
+                    const p = e.results[0][0].transcript.trim();
+                    rec.stop();
+                    enviar(p);
+                };
+                rec.onerror = () => document.getElementById("resposta").innerText = "Toque de novo";
+                rec.start();
+            }).catch(() => document.getElementById("resposta").innerText = "Permitir microfone");
         }
 
-        // Ativa com clique
-        window.addEventListener("click", () => {
-            if (!rec) iniciar();
-        }, { once: false });
-
-        // Mensagem inicial
-        document.getElementById("resposta").innerText = "Clique na tela e fale comigo…";
-
-        // Força carregamento das vozes
-        speechSynthesis.getVoices();
+        window.onclick = () => !rec && iniciar();
+        document.getElementById("resposta").innerText = "Clique e fale…";
     </script>
 
 </body>
