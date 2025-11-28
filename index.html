@@ -100,9 +100,11 @@
             <div id="imagens"></div>
         </div>
     </div>
-    
+
     <script>
-        const API = "https://historiaempapo.up.railway.app/api/responder";
+        // URL correta para localhost
+        const API = "http://localhost:8000/api/responder";
+
         let rec = null;
 
         function falar(t) {
@@ -111,52 +113,64 @@
             u.lang = "pt-BR";
             u.pitch = 1.7;
             u.rate = 0.88;
-            const v = speechSynthesis.getVoices().find(v => /maria|luciana|clara|letícia|female/i.test(v.name)) || speechSynthesis.getVoices()[0];
-            if (v) u.voice = v;
+            const voz = speechSynthesis.getVoices().find(v => /female|maria|luciana|clara|letícia|google.*português|microsoft.*português/i.test(v.name));
+            if (voz) u.voice = voz;
             u.onend = () => setTimeout(() => rec?.start(), 2000);
             speechSynthesis.speak(u);
         }
 
-        async function enviar(p) {
-            document.getElementById("resposta").innerText = "Processando com vapor…";
+        async function enviar(textoPergunta) {
+            const divResposta = document.getElementById("resposta");
+            divResposta.innerText = "Processando com vapor…";
+
             try {
-                const r = await fetch(API, {
+                const resposta = await fetch(API, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt: p })
+                    body: JSON.stringify({ prompt: textoPergunta })  // ← CHAVE CORRETA: "prompt"
                 });
-                const { texto } = await r.json();
-                document.getElementById("resposta").innerText = texto;
-                falar(texto);
-            } catch {
-                document.getElementById("resposta").innerText = "Éter instável…";
-                falar("Éter instável…");
+
+                if (!resposta.ok) {
+                    throw new Error(`HTTP ${resposta.status}`);
+                }
+
+                const dados = await resposta.json();
+                divResposta.innerText = dados.texto || "Sem resposta...";
+                falar(dados.texto);
+            } catch (err) {
+                console.error("Erro no fetch:", err);
+                divResposta.innerText = "Falha no éter… verifique o console (F12)";
+                falar("Falha no éter…");
             }
         }
 
         function iniciar() {
             if (rec) return;
+
             navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
                 const R = window.SpeechRecognition || webkitSpeechRecognition;
                 rec = new R();
                 rec.lang = "pt-BR";
                 rec.continuous = false;
+
                 rec.onstart = () => document.getElementById("resposta").innerText = "Ouvindo…";
                 rec.onresult = e => {
-                    const p = e.results[0][0].transcript.trim();
-                    rec.stop();
-                    enviar(p);
+                    const pergunta = e.results[0][0].transcript.trim();
+                    document.getElementById("resposta").innerText = `Você disse: "${pergunta}"`;
+                    enviar(pergunta);  // ← chama a função corrigida
                 };
-                rec.onerror = () => document.getElementById("resposta").innerText = "Toque de novo";
+                rec.onerror = () => document.getElementById("resposta").innerText = "Erro no microfone… clique novamente";
                 rec.start();
-            }).catch(() => document.getElementById("resposta").innerText = "Permitir microfone");
+            }).catch(() => {
+                document.getElementById("resposta").innerText = "Permitir microfone no navegador";
+            });
         }
 
+        // Inicia ao clicar na tela
         window.onclick = () => !rec && iniciar();
-        document.getElementById("resposta").innerText = "Clique e fale…";
+        document.getElementById("resposta").innerText = "Clique em qualquer lugar e fale…";
     </script>
 
 </body>
 
 </html>
-
